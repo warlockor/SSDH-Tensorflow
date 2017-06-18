@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/SSDH-Tensorflow.iml" filepath="$PROJECT_DIR$/.idea/SSDH-Tensorflow.iml" />
-      <module fileurl="file://$USER_HOME$/Desktop/project/models/.idea/models.iml" filepath="$USER_HOME$/Desktop/project/models/.idea/models.iml" />
     </modules>
   </component>
 </project>
