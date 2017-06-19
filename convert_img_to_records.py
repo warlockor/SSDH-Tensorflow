@@ -43,7 +43,7 @@ def convert(images, labels, name):
             'height': _int64_feature(rows),
             'width': _int64_feature(cols),
             'depth': _int64_feature(depth),
-            'label': _int64_feature(int(labels[index])),
+            'label': _bytes_feature(np.asarray([0] * labels[index] + [1] + [0]*(3-1 - labels[index]), dtype=np.uint8).tostring()),
             'image_raw': _bytes_feature(image_raw)}))
         writer.write(example.SerializeToString())
     writer.close()
@@ -86,16 +86,16 @@ def main(unused_argv):
     ts_filenames = filenames[:FLAGS.validation_size]
     ts_labels = labels[:FLAGS.validation_size]
 
-    tf.logging.info("Start convert training dataset")
-    for index, (X, Y) in enumerate(data_batch(tr_filenames, tr_labels)):
-        tf.logging.info("train{index}".format(index=str(index).zfill(5)))
-        convert(X, Y, "train{index}".format(index=str(index).zfill(5)))
-
-    tf.logging.info("Start convert testing dataset")
-    for index, (X, Y) in enumerate(data_batch(ts_filenames, ts_labels)):
-        tf.logging.info("Test{index}".format(index=str(index).zfill(5)))
-        convert(X, Y, "Test{index}".format(index=str(index).zfill(5)))
-    pass
+    # tf.logging.info("Start convert training dataset")
+    # for index, (X, Y) in enumerate(data_batch(tr_filenames, tr_labels)):
+    #     tf.logging.info("train{index}".format(index=str(index).zfill(5)))
+    #     convert(X, Y, "train{index}".format(index=str(index).zfill(5)))
+    #
+    # tf.logging.info("Start convert testing dataset")
+    # for index, (X, Y) in enumerate(data_batch(ts_filenames, ts_labels)):
+    #     tf.logging.info("Test{index}".format(index=str(index).zfill(5)))
+    #     convert(X, Y, "Test{index}".format(index=str(index).zfill(5)))
+    # pass
 
 if __name__ == "__main__":
     tf.app.run(main=main)
