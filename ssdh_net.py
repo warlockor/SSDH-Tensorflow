@@ -30,11 +30,6 @@ FLAGS = tf.app.flags.FLAGS
 
 
 def _prepocess_data(x):
-    transpose_x = tf.transpose(x, perm=[0, 3, 1, 2])
-    transpose_x = tf.cast(transpose_x, dtype=tf.float32)
-    mean_val = tf.constant(np.load(FLAGS.mean_file), dtype=tf.float32)
-    x = tf.subtract(transpose_x, mean_val)
-    x = tf.transpose(x, perm=[0, 2, 3, 1])
     offset = int(random.random() * (FLAGS.dim_size - FLAGS.image_size))
     return x[:, offset: FLAGS.image_size+offset, offset: FLAGS.image_size+offset, :]
 
@@ -203,6 +198,7 @@ def ssdh_train(net, loss, x, y):
     init = tf.initialize_all_variables()
     with tf.Session() as sess:
         with tf.device("/gpu:0"):
+
             sess.run(init)
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(coord=coord)
@@ -321,9 +317,10 @@ def get_data(batch_size, is_train=True):
 
 
 if __name__ == "__main__":
-    x = tf.placeholder(dtype=tf.uint8, shape=[None, FLAGS.dim_size, FLAGS.dim_size, 3], name='input')
-    y = tf.placeholder(dtype=tf.uint8, shape=[None, FLAGS.num_class], name='label')
-    net, loss = ssdh_net(x, y)
+    with tf.device("/gpu:0"):
+        x = tf.placeholder(dtype=tf.uint8, shape=[None, FLAGS.dim_size, FLAGS.dim_size, 3], name='input')
+        y = tf.placeholder(dtype=tf.uint8, shape=[None, FLAGS.num_class], name='label')
+        net, loss = ssdh_net(x, y)
     if FLAGS.is_train:
         ssdh_train(net, loss, x, y)
     else:

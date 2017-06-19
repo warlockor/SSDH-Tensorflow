@@ -13,10 +13,14 @@ tf.app.flags.DEFINE_integer("store_batch_size", 6000, "tfrecord batch size")
 tf.app.flags.DEFINE_string("directory", "/home/mozat-1/PycharmProjects/SSDH-Tensorflow/data", "the directory store tfrecord")
 tf.app.flags.DEFINE_integer("validation_size", 5000, "validataion data set")
 tf.app.flags.DEFINE_integer("image_size", 256, "image size")
+tf.app.flags.DEFINE_string("mean_file", "./data/ilsvrc_2012_mean.npy", "mean file")
 
 FLAGS = tf.app.flags.FLAGS
 
 tf.logging.set_verbosity(tf.logging.INFO)
+
+mean_file = np.load(FLAGS.mean_file)
+
 
 def _int64_feature(value):
   return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
@@ -38,7 +42,9 @@ def convert(images, labels, name):
     filename = os.path.join(FLAGS.directory, name + '.tfrecords')
     writer = tf.python_io.TFRecordWriter(filename)
     for index in range(num_examples):
-        image_raw = images[index].tostring()
+        img_trans = np.transpose(images[index], [2, 0, 1])[::-1,:,:] - mean_file
+        img = np.transpose(img_trans, [1, 2, 0])
+        image_raw = img.tostring()
         example = tf.train.Example(features=tf.train.Features(feature={
             'height': _int64_feature(rows),
             'width': _int64_feature(cols),
@@ -86,16 +92,16 @@ def main(unused_argv):
     ts_filenames = filenames[:FLAGS.validation_size]
     ts_labels = labels[:FLAGS.validation_size]
 
-    # tf.logging.info("Start convert training dataset")
-    # for index, (X, Y) in enumerate(data_batch(tr_filenames, tr_labels)):
-    #     tf.logging.info("train{index}".format(index=str(index).zfill(5)))
-    #     convert(X, Y, "train{index}".format(index=str(index).zfill(5)))
-    #
-    # tf.logging.info("Start convert testing dataset")
-    # for index, (X, Y) in enumerate(data_batch(ts_filenames, ts_labels)):
-    #     tf.logging.info("Test{index}".format(index=str(index).zfill(5)))
-    #     convert(X, Y, "Test{index}".format(index=str(index).zfill(5)))
-    # pass
+    tf.logging.info("Start convert training dataset")
+    for index, (X, Y) in enumerate(data_batch(tr_filenames, tr_labels)):
+        tf.logging.info("train{index}".format(index=str(index).zfill(5)))
+        convert(X, Y, "train{index}".format(index=str(index).zfill(5)))
+
+    tf.logging.info("Start convert testing dataset")
+    for index, (X, Y) in enumerate(data_batch(ts_filenames, ts_labels)):
+        tf.logging.info("Test{index}".format(index=str(index).zfill(5)))
+        convert(X, Y, "Test{index}".format(index=str(index).zfill(5)))
+    pass
 
 if __name__ == "__main__":
     tf.app.run(main=main)
