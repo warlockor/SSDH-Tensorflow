@@ -39,5 +39,5 @@ def get_data(batch_size, is_train=True):
         return tf.train.batch([image, label],
                                 batch_size=batch_size,
                                 capacity=50,
-                                num_threads=4,
+                                num_threads=1,
                                 allow_smaller_final_batch=True)

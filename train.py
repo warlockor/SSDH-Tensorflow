@@ -1,6 +1,4 @@
 import tensorflow as tf
-from train_net import ssdh_net, get_train_op
-from fetch_data import get_data
 import time
 tf.app.flags.DEFINE_integer("dim_size", 256, "image size into netword")
 
@@ -19,12 +17,15 @@ tf.app.flags.DEFINE_integer("test_batch_size", 50, "batch size in test")
 tf.app.flags.DEFINE_float("learning_rate", 0.001, "learning rate")
 tf.app.flags.DEFINE_integer("max_iter", 50000, "max iterator number")
 tf.app.flags.DEFINE_integer("print_error_step", 100, 'print_error_step')
-tf.app.flags.DEFINE_integer("eval_step", 100, 'print_error_step')
+tf.app.flags.DEFINE_integer("eval_step", 1000, 'print_error_step')
 
 tf.app.flags.DEFINE_integer("lr_decay_step", 10000, 'learning decay step')
 tf.app.flags.DEFINE_float("lr_decay", 0.1, 'learning decay step')
 
 FLAGS = tf.app.flags.FLAGS
+
+from train_net import ssdh_net
+from fetch_data import get_data
 
 
 def ssdh_eval(net, x, y, test_image, test_y):
@@ -97,10 +98,24 @@ if __name__ == "__main__":
 
                 sess.run(global_step.assign(step))
                 img, lbs = sess.run([train_images, train_labels])
-                _, loss_value = sess.run([train_op, loss], feed_dict={x: img, y: lbs})
+                _, total_loss, k1_loss, k2_loss, cls_loss = sess.run([train_op,
+                                                                      loss,
+                                                                      net['k1_loss'],
+                                                                      net['k2_loss'],
+                                                                      net['classification_loss']],
+                                                                     feed_dict={x: img, y: lbs})
 
                 if step % FLAGS.print_error_step == 0:
-                    print "step: {num_step}, loss: {loss}".format(num_step=step, loss=loss_value)
+                    y_ = sess.run(net['fc9'], feed_dict={x: img, y: lbs})
+                    with tf.device("/cpu:0"):
+                        print sess.run(tf.reduce_mean(tf.cast(tf.equal(tf.argmax(lbs, 1), tf.argmax(y_, 1)), tf.float32)))
+
+                    print "step: {num_step}, loss: {loss}, k1: {k1}, k2: {k2}, cls_loss: {cls_loss}"\
+                        .format(num_step=step,
+                                loss=total_loss,
+                                k1=k1_loss,
+                                k2=k2_loss,
+                                cls_loss=cls_loss)
 
                 if step % FLAGS.eval_step == 0:
                     print ssdh_eval(net, x, y, test_images, test_labels)

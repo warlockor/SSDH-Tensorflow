@@ -1,11 +1,12 @@
 import tensorflow as tf
-import random
+
+
 FLAGS = tf.app.flags.FLAGS
 
 
 
 
-def _alexnet_head(x, base_decay=0.01):
+def _alexnet_head(x, base_decay=FLAGS.weight_decay):
     conv1 = tf.layers.conv2d(x,
                              filters=96,
                              kernel_size=[11, 11],
@@ -79,7 +80,7 @@ def _alexnet_head(x, base_decay=0.01):
                              name='conv5')
     pool5 = tf.layers.max_pooling2d(conv5, pool_size=[3, 3], strides=2, padding='SAME', name='pool5')
 
-    pool5_reshape = tf.reshape(pool5, [-1, pool5.shape[1]._value * pool5.shape[2]._value * pool5.shape[3]._value])
+    pool5_reshape = tf.reshape(pool5, [-1, pool5.shape[1].value * pool5.shape[2].value * pool5.shape[3].value])
 
     fc6 = tf.layers.dense(pool5_reshape,
                           units=4096,
@@ -108,7 +109,7 @@ def ssdh_body(net,
               y,
               num_binary=30,
               num_class=6,
-              base_decay=0.1,
+              base_decay=FLAGS.weight_decay,
               l1_weight=1,
               l2_weight=1,
               l3_weight=1):
@@ -116,16 +117,17 @@ def ssdh_body(net,
                                      units=num_binary,
                                      activation=tf.nn.sigmoid,
                                      kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                     kernel_regularizer=tf.contrib.layers.l2_regularizer(1 * base_decay),
                                      name='latent_sigmod')
 
     def _k1_euclidean_loss(name='loss1'):
         mean_vec = tf.constant(.5, dtype=tf.float32, shape=[num_binary])
         with tf.name_scope(name):
-            return tf.negative(tf.reduce_mean(tf.square(tf.subtract(latent_sigmoid, mean_vec))))
+            return tf.reduce_mean(tf.square(tf.subtract(latent_sigmoid, mean_vec)))
 
 
     def _k2_euclidean_loss(name='loss2'):
-        mean_val = tf.constant(.5, dtype=tf.float32, shape=[1])
+        mean_val = tf.constant(.5, dtype=tf.float32)
         with tf.name_scope(name):
             return tf.pow(tf.subtract(tf.reduce_mean(latent_sigmoid), mean_val), 2)
 
@@ -145,9 +147,10 @@ def ssdh_body(net,
     l1_weight = tf.constant(l1_weight, tf.float32)
     l2_weight = tf.constant(l2_weight, tf.float32)
     l3_weight = tf.constant(l3_weight, tf.float32)
-    final_loss = tf.add(tf.add(tf.multiply(l1_weight, k1_loss),
-                  tf.multiply(l2_weight, k2_loss)),
-                  tf.multiply(l3_weight, classification_loss))
+    final_loss = tf.add(
+                    tf.subtract(tf.multiply(l3_weight, classification_loss),
+                                tf.multiply(l1_weight, k1_loss)),
+                    tf.multiply(l2_weight, k2_loss))
 
     net['latent_sigmod'] = latent_sigmoid
     net['k1_loss'] = k1_loss
