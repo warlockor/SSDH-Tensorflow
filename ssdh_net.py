@@ -29,10 +29,6 @@ tf.app.flags.DEFINE_integer("lr_decay", 0.1, 'learning decay step')
 FLAGS = tf.app.flags.FLAGS
 
 
-def _prepocess_data(x):
-    offset = int(random.random() * (FLAGS.dim_size - FLAGS.image_size))
-    return x[:, offset: FLAGS.image_size+offset, offset: FLAGS.image_size+offset, :]
-
 
 
 def _alexnet_head(x, base_decay=0.01, scope='alexnet'):
@@ -179,7 +175,6 @@ def ssdh_body(net,
 def ssdh_net(x, y):
     with tf.device("/gpu:0"):
         with tf.name_scope(name="ssdh"):
-            x = _prepocess_data(x)
             net, tail = _alexnet_head(x, base_decay=FLAGS.weight_decay)
             net, tail = ssdh_body(net,
                             tail,
@@ -191,6 +186,38 @@ def ssdh_net(x, y):
                             l2_weight=1,
                             l3_weight=1)
     return net, tail
+
+
+def get_train_op(step):
+    train_vals = tf.trainable_variables()
+    grads = tf.gradients(loss, train_vals)
+
+    kernels = train_vals[::2][:-1]
+    biases = train_vals[1::2][:-1]
+    final_kernel = train_vals[::2][-1:]
+    final_biase = train_vals[1::2][-1:]
+
+    g_kernels = grads[::2][:-1]
+    g_biases = grads[1::2][:-1]
+    g_final_kernel = grads[::2][-1:]
+    g_final_biase = grads[1::2][-1:]
+
+    learning_rate = tf.train.exponential_decay(FLAGS.learning_rate,
+                                               step,
+                                               FLAGS.lr_decay_step,
+                                               FLAGS.lr_decay,
+                                               staircase=True)
+    op1 = tf.train.GradientDescentOptimizer(learning_rate)
+    op2 = tf.train.GradientDescentOptimizer(learning_rate * 2).minimize()
+    op3 = tf.train.GradientDescentOptimizer(learning_rate * 10)
+    op4 = tf.train.GradientDescentOptimizer(learning_rate * 20)
+
+    train_op1 = op1.apply_gradients(zip(g_kernels, kernels))
+    train_op2 = op2.apply_gradients(zip(g_biases, biases))
+    train_op3 = op3.apply_gradients(zip(g_final_kernel, final_kernel))
+    train_op4 = op4.apply_gradients(zip(g_final_biase, final_biase))
+    train_op = tf.group(train_op1, train_op2, train_op3, train_op4)
+    return train_op
 
 def ssdh_train(net, loss, x, y):
     train_images, train_labels = get_data(FLAGS.train_batch_size, is_train=True)
@@ -206,34 +233,7 @@ def ssdh_train(net, loss, x, y):
             t1 = time.time()
             for step in range(FLAGS.max_iter):
                 img, lbs = sess.run([train_images, train_labels])
-                train_vals = tf.trainable_variables()
-                grads = tf.gradients(loss, train_vals)
-
-                kernels = train_vals[::2][:-1]
-                biases = train_vals[1::2][:-1]
-                final_kernel = train_vals[::2][-1:]
-                final_biase = train_vals[1::2][-1:]
-
-                g_kernels = grads[::2][:-1]
-                g_biases = grads[1::2][:-1]
-                g_final_kernel = grads[::2][-1:]
-                g_final_biase = grads[1::2][-1:]
-
-                learning_rate = tf.train.exponential_decay(FLAGS.learning_rate,
-                                                 step,
-                                                 FLAGS.lr_decay_step,
-                                                 FLAGS.lr_decay,
-                                                 staircase=True)
-                op1 = tf.train.GradientDescentOptimizer(learning_rate)
-                op2 = tf.train.GradientDescentOptimizer(learning_rate * 2)
-                op3 = tf.train.GradientDescentOptimizer(learning_rate * 10)
-                op4 = tf.train.GradientDescentOptimizer(learning_rate * 20)
-
-                train_op1 = op1.apply_gradients(zip(g_kernels, kernels))
-                train_op2 = op2.apply_gradients(zip(g_biases, biases))
-                train_op3 = op3.apply_gradients(zip(g_final_kernel, final_kernel))
-                train_op4 = op4.apply_gradients(zip(g_final_biase, final_biase))
-                train_op = tf.group(train_op1, train_op2, train_op3, train_op4)
+                train_op = get_train_op(step)
                 sess.run(train_op, feed_dict={x:img, y:lbs})
 
                 print step
