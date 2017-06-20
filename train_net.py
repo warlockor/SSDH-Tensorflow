@@ -7,7 +7,7 @@ FLAGS = tf.app.flags.FLAGS
 
 def _alexnet_head(x, base_decay=0.01):
     conv1 = tf.layers.conv2d(x,
-                             filters=64,
+                             filters=96,
                              kernel_size=[11, 11],
                              strides=4,
                              padding='SAME',
@@ -21,6 +21,7 @@ def _alexnet_head(x, base_decay=0.01):
                                     padding='SAME',
                                     name='pool1')
     norm1 = tf.nn.lrn(pool1,
+                      depth_radius=5,
                       alpha=1e-4,
                       beta=0.75,
                       name='norm1')
@@ -40,7 +41,11 @@ def _alexnet_head(x, base_decay=0.01):
                                     strides=2,
                                     padding='SAME',
                                     name='pool2')
-    norm2 = tf.nn.lrn(pool2, alpha=1e-4, beta=0.75, name='norm2')
+    norm2 = tf.nn.lrn(pool2,
+                      depth_radius=5,
+                      alpha=1e-4,
+                      beta=0.75,
+                      name='norm2')
 
     conv3 = tf.layers.conv2d(norm2,
                              filters=384,
@@ -107,25 +112,27 @@ def ssdh_body(net,
               l1_weight=1,
               l2_weight=1,
               l3_weight=1):
-    latent_sigmoid = tf.layers.dense(tail, units=num_binary,
-                    activation=tf.nn.sigmoid,
-                    name='latent_sigmod')
+    latent_sigmoid = tf.layers.dense(tail,
+                                     units=num_binary,
+                                     activation=tf.nn.sigmoid,
+                                     kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                     name='latent_sigmod')
 
     def _k1_euclidean_loss(name='loss1'):
         mean_vec = tf.constant(.5, dtype=tf.float32, shape=[num_binary])
         with tf.name_scope(name):
-            return tf.negative(tf.divide(tf.norm(tf.subtract(latent_sigmoid, mean_vec)), tf.constant(num_binary, tf.float32)))
+            return tf.negative(tf.reduce_mean(tf.square(tf.subtract(latent_sigmoid, mean_vec))))
 
 
     def _k2_euclidean_loss(name='loss2'):
         mean_val = tf.constant(.5, dtype=tf.float32, shape=[1])
         with tf.name_scope(name):
-            return tf.pow(tf.subtract(tf.reduce_sum(latent_sigmoid), mean_val), 2)
+            return tf.pow(tf.subtract(tf.reduce_mean(latent_sigmoid), mean_val), 2)
 
     def _classification_loss(name='loss'):
         fc9 = tf.layers.dense(latent_sigmoid,
                               units=num_class,
-                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.2),
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1*base_decay),
                               name='fc9')
 

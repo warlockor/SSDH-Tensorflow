@@ -25,21 +25,18 @@ def get_data(batch_size, is_train=True):
     label = tf.decode_raw(features['label'], tf.uint8)
     label = tf.reshape(label, [FLAGS.num_class])
 
-    resized_image = tf.image.resize_image_with_crop_or_pad(image=image,
-                                                           target_height=FLAGS.dim_size,
-                                                           target_width=FLAGS.dim_size)
 
     min_after_dequeue = 32
     capacity = min_after_dequeue + 3 * batch_size
 
     if is_train:
-        return tf.train.shuffle_batch([resized_image, label],
+        return tf.train.shuffle_batch([image, label],
                                       batch_size=32,
                                       capacity=capacity,
                                       num_threads=4,
                                       min_after_dequeue=min_after_dequeue)
     else:
-        return tf.train.batch([resized_image, label],
+        return tf.train.batch([image, label],
                                 batch_size=batch_size,
                                 capacity=50,
                                 num_threads=4,

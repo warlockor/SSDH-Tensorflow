@@ -129,14 +129,16 @@ def ssdh_body(net,
               l1_weight=1,
               l2_weight=1,
               l3_weight=1):
-    latent_sigmoid = tf.layers.dense(tail, units=num_binary,
-                    activation=tf.nn.sigmoid,
-                    name='latent_sigmod')
+    latent_sigmoid = tf.layers.dense(tail,
+                                     units=num_binary,
+                                     activation=tf.nn.sigmoid,
+                                     kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                                     name='latent_sigmod')
 
     def _k1_euclidean_loss(name='loss1'):
         mean_vec = tf.constant(.5, dtype=tf.float32, shape=[num_binary])
         with tf.name_scope(name):
-            return tf.negative(tf.divide(tf.norm(tf.subtract(latent_sigmoid, mean_vec)), tf.constant(num_binary, tf.float32)))
+            return tf.negative(tf.divide(tf.square(tf.subtract(latent_sigmoid, mean_vec)), tf.constant(num_binary, tf.float32)))
 
 
     def _k2_euclidean_loss(name='loss2'):
@@ -147,7 +149,7 @@ def ssdh_body(net,
     def _classification_loss(name='loss'):
         fc9 = tf.layers.dense(latent_sigmoid,
                               units=num_class,
-                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
+                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.2),
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1*base_decay),
                               name='fc9')
 
