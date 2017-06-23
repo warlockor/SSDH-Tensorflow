@@ -42,8 +42,8 @@ def convert(images, labels, name):
     filename = os.path.join(FLAGS.directory, name + '.tfrecords')
     writer = tf.python_io.TFRecordWriter(filename)
     for index in range(num_examples):
-        img_trans = np.transpose(images[index], [2, 0, 1])[::-1,:,:] - mean_file
-        img = np.transpose(img_trans, [1, 2, 0])
+        img_trans = np.transpose(images[index], [2, 0, 1])[::-1, :, :] - mean_file
+        img = np.transpose(img_trans, [1, 2, 0])[:, :, ::-1]
         image_raw = img.tostring()
         example = tf.train.Example(features=tf.train.Features(feature={
             'height': _int64_feature(rows),

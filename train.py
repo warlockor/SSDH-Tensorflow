@@ -9,7 +9,7 @@ tf.app.flags.DEFINE_integer("num_binary", 800, "number of binary code")
 tf.app.flags.DEFINE_float("weight_decay", 0.0005, "l2 weight regularization decay")
 tf.app.flags.DEFINE_string("train_dir", "./data/train", "train data dir")
 tf.app.flags.DEFINE_string("test_dir", "./data/test", "train data dir")
-
+tf.app.flags.DEFINE_string("weight_path", "./data/caffenet_tensorflow.npy", "weight_path")
 tf.app.flags.DEFINE_bool("is_train", True, "train or test")
 tf.app.flags.DEFINE_integer("train_batch_size", 32, "batch size in train")
 tf.app.flags.DEFINE_integer("test_batch_size", 50, "batch size in test")
@@ -17,14 +17,14 @@ tf.app.flags.DEFINE_integer("test_batch_size", 50, "batch size in test")
 tf.app.flags.DEFINE_float("learning_rate", 0.001, "learning rate")
 tf.app.flags.DEFINE_integer("max_iter", 50000, "max iterator number")
 tf.app.flags.DEFINE_integer("print_error_step", 100, 'print_error_step')
-tf.app.flags.DEFINE_integer("eval_step", 1000, 'print_error_step')
+tf.app.flags.DEFINE_integer("eval_step", 1000, 'eval_step')
 
 tf.app.flags.DEFINE_integer("lr_decay_step", 10000, 'learning decay step')
 tf.app.flags.DEFINE_float("lr_decay", 0.1, 'learning decay step')
-
+tf.app.flags.DEFINE_float("momentum", "0.9", "momentum")
 FLAGS = tf.app.flags.FLAGS
 
-from train_net import ssdh_net
+from train_net import ssdh_net, load_fine_tune
 from fetch_data import get_data
 
 
@@ -55,15 +55,16 @@ if __name__ == "__main__":
                                                staircase=True)
 
 
-    with tf.device("/gpu:0"):
+    with tf.device("/gpu:1"):
         x = tf.placeholder(dtype=tf.float32, shape=[None, FLAGS.image_size, FLAGS.image_size, 3], name='input')
         y = tf.placeholder(dtype=tf.uint8, shape=[None, FLAGS.num_class], name='label')
         net, loss = ssdh_net(x, y)
 
 
         init = tf.initialize_all_variables()
-
-        with tf.Session() as sess:
+        config = tf.ConfigProto(allow_soft_placement=True)
+        config.gpu_options.allow_growth = True
+        with tf.Session(config=config) as sess:
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(coord=coord)
 
@@ -94,22 +95,32 @@ if __name__ == "__main__":
             train_op = tf.group(train_op1, train_op2, train_op3, train_op4)
 
             sess.run(init)
+            load_fine_tune(sess)
+            with tf.control_dependencies([train_op]):
+                dummy = tf.constant(0)
             for step in range(FLAGS.max_iter):
+
+                partial = sess.partial_run_setup([net['latent_sigmoid'],
+                                                  net['k1_loss'],
+                                                  net['k2_loss'],
+                                                  net['classification_loss'],
+                                                  loss, dummy], [x, y])
+
 
                 sess.run(global_step.assign(step))
                 img, lbs = sess.run([train_images, train_labels])
-                _, total_loss, k1_loss, k2_loss, cls_loss = sess.run([train_op,
-                                                                      loss,
-                                                                      net['k1_loss'],
-                                                                      net['k2_loss'],
-                                                                      net['classification_loss']],
-                                                                     feed_dict={x: img, y: lbs})
+                latent_sigmoid = sess.partial_run(partial,
+                                                  net['latent_sigmoid'],
+                                                  feed_dict={x: img})
+
+                k1_loss = sess.partial_run(partial, net['k1_loss'])
+                k2_loss = sess.partial_run(partial, net['k2_loss'])
+                cls_loss = sess.partial_run(partial, net['classification_loss'], feed_dict={y: lbs})
+                total_loss = sess.partial_run(partial, loss)
+                sess.partial_run(partial, dummy)
+                # sess.run(train_op,feed_dict={x: img, y: lbs})
 
                 if step % FLAGS.print_error_step == 0:
-                    y_ = sess.run(net['fc9'], feed_dict={x: img, y: lbs})
-                    with tf.device("/cpu:0"):
-                        print sess.run(tf.reduce_mean(tf.cast(tf.equal(tf.argmax(lbs, 1), tf.argmax(y_, 1)), tf.float32)))
-
                     print "step: {num_step}, loss: {loss}, k1: {k1}, k2: {k2}, cls_loss: {cls_loss}"\
                         .format(num_step=step,
                                 loss=total_loss,
@@ -118,8 +129,8 @@ if __name__ == "__main__":
                                 cls_loss=cls_loss)
 
                 if step % FLAGS.eval_step == 0:
-                    print ssdh_eval(net, x, y, test_images, test_labels)
-
+                    accuracy = ssdh_eval(net, x, y, test_images, test_labels)
+                    print "test accuracy: {accuracy}".format(accuracy=accuracy)
 
             coord.request_stop()
             coord.join(threads)

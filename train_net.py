@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -7,11 +8,12 @@ FLAGS = tf.app.flags.FLAGS
 
 
 def _alexnet_head(x, base_decay=FLAGS.weight_decay):
+
     conv1 = tf.layers.conv2d(x,
                              filters=96,
                              kernel_size=[11, 11],
                              strides=4,
-                             padding='SAME',
+                             padding='VALID',
                              activation=tf.nn.relu,
                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                              kernel_regularizer=tf.contrib.layers.l2_regularizer(1*base_decay),
@@ -19,7 +21,7 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
     pool1 = tf.layers.max_pooling2d(conv1,
                                     pool_size=[3, 3],
                                     strides=2,
-                                    padding='SAME',
+                                    padding='VALID',
                                     name='pool1')
     norm1 = tf.nn.lrn(pool1,
                       depth_radius=5,
@@ -31,7 +33,7 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
                              filters=256,
                              kernel_size=[5, 5],
                              strides=1,
-                             padding='VALID',
+                             padding='SAME',
                              activation=tf.nn.relu,
                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                              bias_initializer=tf.ones_initializer(),
@@ -40,7 +42,7 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
     pool2 = tf.layers.max_pooling2d(conv2,
                                     pool_size=[3, 3],
                                     strides=2,
-                                    padding='SAME',
+                                    padding='VALID',
                                     name='pool2')
     norm2 = tf.nn.lrn(pool2,
                       depth_radius=5,
@@ -52,7 +54,7 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
                              filters=384,
                              kernel_size=[3, 3],
                              strides=1,
-                             padding='VALID',
+                             padding='SAME',
                              activation=tf.nn.relu,
                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                              kernel_regularizer=tf.contrib.layers.l2_regularizer(1*base_decay),
@@ -61,7 +63,7 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
                              filters=384,
                              kernel_size=[3, 3],
                              strides=1,
-                             padding='VALID',
+                             padding='SAME',
                              activation=tf.nn.relu,
                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                              bias_initializer=tf.ones_initializer(),
@@ -72,13 +74,13 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
                              filters=256,
                              kernel_size=[3, 3],
                              strides=1,
-                             padding='VALID',
+                             padding='SAME',
                              activation=tf.nn.relu,
                              kernel_initializer=tf.truncated_normal_initializer(stddev=0.01),
                              bias_initializer=tf.ones_initializer(),
                              kernel_regularizer=tf.contrib.layers.l2_regularizer(1*base_decay),
                              name='conv5')
-    pool5 = tf.layers.max_pooling2d(conv5, pool_size=[3, 3], strides=2, padding='SAME', name='pool5')
+    pool5 = tf.layers.max_pooling2d(conv5, pool_size=[3, 3], strides=2, padding='VALID', name='pool5')
 
     pool5_reshape = tf.reshape(pool5, [-1, pool5.shape[1].value * pool5.shape[2].value * pool5.shape[3].value])
 
@@ -89,7 +91,7 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
                           bias_initializer=tf.ones_initializer(),
                           kernel_regularizer=tf.contrib.layers.l2_regularizer(1*base_decay),
                           name='fc6')
-    drop6 = tf.layers.dropout(fc6, rate=0.5, name="drop6")
+    drop6 = tf.layers.dropout(fc6, rate=0.5)
     fc7 = tf.layers.dense(drop6,
                           units=4096,
                           activation=tf.nn.relu,
@@ -97,7 +99,7 @@ def _alexnet_head(x, base_decay=FLAGS.weight_decay):
                           bias_initializer=tf.ones_initializer(),
                           kernel_regularizer=tf.contrib.layers.l2_regularizer(1*base_decay),
                           name='fc7')
-    drop7 = tf.layers.dropout(fc7, rate=0.5, name="drop7")
+    drop7 = tf.layers.dropout(fc7, rate=0.5)
 
     return {"conv1": conv1, "pool1": pool1, "norm1": norm1,
             "conv2": conv2, "pool2": pool2, "norm2": norm2,
@@ -152,7 +154,7 @@ def ssdh_body(net,
                                 tf.multiply(l1_weight, k1_loss)),
                     tf.multiply(l2_weight, k2_loss))
 
-    net['latent_sigmod'] = latent_sigmoid
+    net['latent_sigmoid'] = latent_sigmoid
     net['k1_loss'] = k1_loss
     net['k2_loss'] = k2_loss
     net['classification_loss'] = classification_loss
@@ -174,6 +176,24 @@ def ssdh_net(x, y):
                     l3_weight=1)
     return net, loss
 
+
+def load_fine_tune(sess):
+    weights_dict = np.load(FLAGS.weight_path, encoding='bytes').item()
+    weights_dict.pop("fc8")
+    for op_name in weights_dict.keys():
+        if op_name in ['conv2', 'conv4', 'conv5']:
+            weights = np.append(weights_dict[op_name]['weights'], weights_dict[op_name]['weights'], 2)
+        else:
+            weights = weights_dict[op_name]['weights']
+        biases = weights_dict[op_name]['biases']
+        with tf.variable_scope(op_name, reuse=True):
+            bias = tf.get_variable('bias', trainable=True)
+            sess.run(bias.assign(biases))
+            kernel = tf.get_variable('kernel', trainable=True)
+            sess.run(kernel.assign(weights))
+
+
+
 def get_train_op(loss, step):
     train_vals = tf.trainable_variables()
     grads = tf.gradients(loss, train_vals)
@@ -193,10 +213,10 @@ def get_train_op(loss, step):
                                                FLAGS.lr_decay_step,
                                                FLAGS.lr_decay,
                                                staircase=True)
-    op1 = tf.train.GradientDescentOptimizer(learning_rate)
-    op2 = tf.train.GradientDescentOptimizer(learning_rate * 2)
-    op3 = tf.train.GradientDescentOptimizer(learning_rate * 10)
-    op4 = tf.train.GradientDescentOptimizer(learning_rate * 20)
+    op1 = tf.train.MomentumOptimizer(learning_rate, FLAGS.momentum)
+    op2 = tf.train.MomentumOptimizer(learning_rate * 2, FLAGS.momentum)
+    op3 = tf.train.MomentumOptimizer(learning_rate * 10, FLAGS.momentum)
+    op4 = tf.train.MomentumOptimizer(learning_rate * 20, FLAGS.momentum)
 
     train_op1 = op1.apply_gradients(zip(g_kernels, kernels))
     train_op2 = op2.apply_gradients(zip(g_biases, biases))

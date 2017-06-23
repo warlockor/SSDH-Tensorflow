@@ -6,6 +6,8 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="models" />
     <orderEntry type="module" module-name="models" />
+    <orderEntry type="module" module-name="caffe-tensorflow" />
+    <orderEntry type="module" module-name="python" />
   </component>
   <component name="TestRunnerService">
     <option name="projectConfiguration" value="Nosetests" />

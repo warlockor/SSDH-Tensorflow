@@ -19,9 +19,8 @@ def get_data(batch_size, is_train=True):
         })
     height = tf.cast(features['height'], tf.int32)
     width = tf.cast(features['width'], tf.int32)
-    image = tf.decode_raw(features['image_raw'], tf.float32)
+    image = tf.cast(tf.decode_raw(features['image_raw'], tf.float64), tf.float32)
     image = tf.reshape(image, [height, width, 3])
-    image = tf.random_crop(image, [FLAGS.image_size, FLAGS.image_size, 3])
     label = tf.decode_raw(features['label'], tf.uint8)
     label = tf.reshape(label, [FLAGS.num_class])
 
@@ -30,12 +29,19 @@ def get_data(batch_size, is_train=True):
     capacity = min_after_dequeue + 3 * batch_size
 
     if is_train:
+        image = tf.random_crop(image, [FLAGS.image_size, FLAGS.image_size, 3])
         return tf.train.shuffle_batch([image, label],
                                       batch_size=32,
                                       capacity=capacity,
                                       num_threads=4,
                                       min_after_dequeue=min_after_dequeue)
     else:
+        left_offset = (FLAGS.dim_size-FLAGS.image_size)/2
+        image = tf.image.crop_to_bounding_box(image,
+                                              left_offset,
+                                              left_offset,
+                                              FLAGS.image_size,
+                                              FLAGS.image_size)
         return tf.train.batch([image, label],
                                 batch_size=batch_size,
                                 capacity=50,
